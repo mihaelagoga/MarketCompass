@@ -6,13 +6,10 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
 # --- Conditional .env Loading for Local Development ---
-if not os.environ.get('FUNCTION_TARGET'):
-    print("Running in local environment. Loading .env file...")
-
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(script_dir))
-    dotenv_path = os.path.join(project_root, '.env')
-    load_dotenv(dotenv_path=dotenv_path)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+dotenv_path = os.path.join(project_root, '.env')
+load_dotenv(dotenv_path=dotenv_path)
 
 
 def fetch_daily_news(event, context):
