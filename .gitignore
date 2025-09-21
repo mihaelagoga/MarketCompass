@@ -1,0 +1,27 @@
+# Environment variables
+# ---------------------
+# Ignore the file containing secret keys and other environment-specific variables
+.env
+
+
+# Python artifacts
+# ----------------
+# Ignore Python's bytecode cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# Virtual environment
+# -------------------
+# Ignore virtual environment folders
+.venv
+venv/
+env/
+
+
+# IDE / Editor specific files
+# ---------------------------
+# Ignore Visual Studio Code settings folder
+.vscode/

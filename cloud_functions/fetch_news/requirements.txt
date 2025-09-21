@@ -1,1 +1,3 @@
-placeholder
+requests
+google-cloud-firestore
+python-dotenv
