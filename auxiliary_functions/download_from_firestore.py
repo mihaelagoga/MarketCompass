@@ -5,10 +5,6 @@ from google.cloud import firestore
 
 
 def json_serial_converter(o):
-    """
-    Custom JSON serializer for objects not serializable by default json code.
-    Specifically handles datetime objects from Firestore.
-    """
     if isinstance(o, datetime.datetime):
         return o.isoformat() 
     raise TypeError(f"Object of type {o.__class__.__name__} is not JSON serializable")
@@ -19,11 +15,10 @@ def download_firestore_collection():
     Downloads all documents from the 'articles' collection in Firestore
     and saves them to a specific folder as a JSON file.
     """
-   
+
     collection_name = "articles"
     output_file_path = "data/news_articles/raw_data/articles_export.json"
 
-   
     print("Connecting to Firestore...")
     db = firestore.Client()
 
@@ -53,7 +48,6 @@ def download_firestore_collection():
         json.dump(all_articles, f, ensure_ascii=False, indent=4, default=json_serial_converter)
 
     print("\nData has been exported.")
-
 
 if __name__ == "__main__":
     download_firestore_collection()

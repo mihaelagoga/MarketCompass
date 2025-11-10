@@ -11,18 +11,10 @@ from google.cloud import bigquery
 from google.cloud.exceptions import NotFound
 
 
+GCP_PROJECT_ID = 'your-gcp-project-id'
 
-# Your Google Cloud Project ID
-GCP_PROJECT_ID = 'pivotal-glider-472219-r7'
-
-# The name for your BigQuery dataset (e.g., 'stock_market_ml_data')
 BIGQUERY_DATASET = 'market_data'
 
-# --- END OF CONFIGURATION ---
-# ==============================================================================
-
-
-# --- BQ CLIENT SETUP ---
 if GCP_PROJECT_ID == 'your-gcp-project-id':
     print("="*50)
     print("ERROR: Please update GCP_PROJECT_ID at the top of the script.")
@@ -46,7 +38,6 @@ except Exception as e:
     print(f"ERROR: Could not initialize BigQuery client. {e}")
     print("Please ensure you have authenticated with 'gcloud auth application-default login'")
     exit()
-# --- END BQ CLIENT SETUP ---
 
 
 def create_table_if_not_exists(table_name, schema, partition_field):
@@ -56,9 +47,7 @@ def create_table_if_not_exists(table_name, schema, partition_field):
     table_id = f"{GCP_PROJECT_ID}.{BIGQUERY_DATASET}.{table_name}"
     
     try:
-        # Check if table exists
         bq_client.get_table(table_id)
-        # print(f"Table {table_id} already exists.")
     except NotFound:
         print(f"Table {table_id} not found. Creating...")
         try:
@@ -72,7 +61,7 @@ def create_table_if_not_exists(table_name, schema, partition_field):
         except Exception as e:
             print(f"  --- ERROR creating table {table_name} ---")
             print(f"  {e}")
-            raise # Re-raise the exception to stop the script
+            raise
 
 
 def upload_to_bigquery(df, table_name, schema, partition_field='date'):
@@ -80,32 +69,26 @@ def upload_to_bigquery(df, table_name, schema, partition_field='date'):
     Uploads a DataFrame to BigQuery idempotently using a DELETE/INSERT pattern.
     - Ensures table exists (from create_table_if_not_exists helper).
     - Deletes all rows in the destination table that fall within the new data's date range.
-    - Inserts the new data using streaming_rows_json (to bypass pyarrow).
     """
     table_id = f"{GCP_PROJECT_ID}.{BIGQUERY_DATASET}.{table_name}"
-    
-   
+
     try:
         create_table_if_not_exists(table_name, schema, partition_field)
     except Exception as e:
         print(f"Aborting upload to {table_name} due to table creation error.")
         return
 
-    # --- 2. Prepare DataFrame for JSON Streaming ---
     df_upload = df.copy()
 
-    # 2a. Check for empty dataframe
     if df_upload.empty:
         print(f"No data provided for {table_name}, skipping upload.")
         return
 
-    # 2b. Handle date/partition column: Must be YYYY-MM-DD string
     if partition_field not in df_upload.columns:
         print(f"ERROR: Partition field '{partition_field}' not in DataFrame columns: {df_upload.columns}")
         return
     df_upload[partition_field] = pd.to_datetime(df_upload[partition_field]).dt.strftime('%Y-%m-%d')
 
-    # 2c. Handle schema-specific type conversions (rounding, integers)
     for col_schema in schema:
         col_name = col_schema.name
         if col_name not in df_upload.columns:
@@ -116,11 +99,9 @@ def upload_to_bigquery(df, table_name, schema, partition_field='date'):
         elif col_schema.field_type == 'INTEGER':
              df_upload[col_name] = df_upload[col_name].astype(float).astype('Int64')
 
-    # 2d. Convert all forms of NaN/NaT to None (which becomes NULL)
     df_upload = df_upload.fillna(pd.NA).where(pd.notna(df_upload), None)
     df_upload = df_upload.replace({np.nan: None})
 
-    # --- 3. (NEW) Delete Existing Data in Date Range ---
     min_date = df_upload[partition_field].min()
     max_date = df_upload[partition_field].max()
 
@@ -131,7 +112,6 @@ def upload_to_bigquery(df, table_name, schema, partition_field='date'):
     print(f"\nMaking upload idempotent: Deleting existing data in {table_name} between {min_date} and {max_date}...")
     
     try:
-        # Use query parameters to prevent SQL injection and handle types
         query_params = [
             bigquery.ScalarQueryParameter("min_date", "DATE", min_date),
             bigquery.ScalarQueryParameter("max_date", "DATE", max_date),
@@ -142,8 +122,7 @@ def upload_to_bigquery(df, table_name, schema, partition_field='date'):
             DELETE FROM `{table_id}`
             WHERE {partition_field} BETWEEN @min_date AND @max_date
         """
-        
-        # Start the query job and wait for it to complete
+
         delete_job = bq_client.query(delete_query, job_config=job_config)
         delete_job.result()
         
@@ -155,7 +134,6 @@ def upload_to_bigquery(df, table_name, schema, partition_field='date'):
         print(f"  Aborting upload for this table.")
         return
 
-    # --- 4. Insert New Data via Streaming ---
     rows_to_insert = df_upload.to_dict('records')
 
     if not rows_to_insert:
@@ -185,11 +163,6 @@ def upload_to_bigquery(df, table_name, schema, partition_field='date'):
         df_upload.info()
         print("\n  DataFrame Head:")
         print(df_upload.head())
-        print("  ---------------------------------")# =_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=
-# SCRIPT START
-# =_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=_=
-
-
 
 print("\nFetching FRED economic data...")
 try:
@@ -200,15 +173,12 @@ try:
     
     print("  FRED data was retrieved.")
 
-    # --- BQ UPLOAD: fred_economic_data ---
-    # Define schema based on user image
     fred_schema = [
         bigquery.SchemaField('date', 'DATE'),
         bigquery.SchemaField('fed_Funds', 'NUMERIC'),
-        bigquery.SchemaField('dgs_10', 'NUMERIC'), # 'dgs 10' -> 'dgs_10'
+        bigquery.SchemaField('dgs_10', 'NUMERIC'),
     ]
     df_to_upload_fred = fred_data.reset_index()
-    # Rename columns to match schema
     df_to_upload_fred.rename(columns={
         'DATE': 'date', 
         'FEDFUNDS': 'fed_Funds', 
@@ -220,7 +190,6 @@ try:
         fred_schema, 
         partition_field='date'
     )
-    # --- END BQ UPLOAD ---
 
 except Exception as e:
     print(f"An error occurred fetching FRED data: {e}")
@@ -239,15 +208,12 @@ try:
         
         print("  Fetched market data.")
 
-        # --- BQ UPLOAD: market_data ---
-        # Define schema based on user image
         market_schema = [
             bigquery.SchemaField('date', 'DATE'),
             bigquery.SchemaField('sp500', 'NUMERIC'),
             bigquery.SchemaField('vix', 'NUMERIC'),
         ]
         df_to_upload_market = market_data.reset_index()
-        # Rename columns to match schema
         df_to_upload_market.rename(columns={
             'Date': 'date', 
             'SP500': 'sp500', 
@@ -259,7 +225,6 @@ try:
             market_schema, 
             partition_field='date'
         )
-        # --- END BQ UPLOAD ---
         
     else:
         print("Error: No data was returned from Yahoo Finance.")
@@ -267,9 +232,7 @@ try:
 except Exception as e:
     print(f"An error occurred: {e}")
 
-
 print("\nFetching Google Trends data...")
-
 
 start_date = "2025-07-20"
 end_date = "2025-10-29"
@@ -300,8 +263,6 @@ MAX_PER_BATCH = 5
 
 def make_batches(all_terms, anchor, max_size=MAX_PER_BATCH):
 
-    """Returning batches where each batch contains the anchor plus up to (max_size-1) other terms."""
-    
     others = [t for t in all_terms if t != anchor]
     batches = []
     i = 0
@@ -317,9 +278,6 @@ def make_batches(all_terms, anchor, max_size=MAX_PER_BATCH):
 pytrends = TrendReq(hl='en-US', tz=0)
 
 def fetch_batch_df(batch_terms, timeframe, geo='US', retries=4):
-    """Build payload and return a DataFrame for the given batch_terms covering timeframe.
-       Returns DataFrame with date index (datetime) and columns = terms (and possibly 'isPartial' dropped).
-    """
     attempt = 0
     backoff = 1.0
     last_exc = None
@@ -404,24 +362,21 @@ for kw in keywords:
     if kw not in final.columns:
         final[kw] = float('nan')
 
-final = final[keywords] # Ensures correct order and columns
+final = final[keywords]
 final = final.round(4).clip(lower=0, upper=100)
 final.index = pd.to_datetime(final.index)
 
-# --- BQ UPLOAD: google_trends ---
 df_to_upload_trends = final.reset_index()
 
-# Sanitize column names for BQ (replace spaces with underscores)
-sanitized_cols = {'index': 'date'} # Start with 'index' -> 'date'
+sanitized_cols = {'index': 'date'}
 sanitized_keywords_list = []
-for kw in keywords: # 'keywords' is the original list with spaces
+for kw in keywords:
     sanitized_name = kw.replace(' ', '_').replace('-', '_')
     sanitized_cols[kw] = sanitized_name
     sanitized_keywords_list.append(sanitized_name)
 
 df_to_upload_trends.rename(columns=sanitized_cols, inplace=True)
 
-# Now build schema with sanitized names
 google_trends_schema = [bigquery.SchemaField('date', 'DATE')] + \
                      [bigquery.SchemaField(kw, 'NUMERIC') for kw in sanitized_keywords_list]
 
@@ -431,7 +386,6 @@ upload_to_bigquery(
     google_trends_schema, 
     partition_field='date'
 )
-# --- END BQ UPLOAD ---
 
 print("\nGoogle Trends data processing and upload complete.")
 print(final.head()) 
