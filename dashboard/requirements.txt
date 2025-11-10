@@ -1,0 +1,9 @@
+dash
+dash-bootstrap-components
+plotly
+google-cloud-bigquery
+pandas
+scikit-learn
+numpy
+gunicorn
+db-dtypes

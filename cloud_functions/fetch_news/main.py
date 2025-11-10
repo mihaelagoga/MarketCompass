@@ -5,7 +5,7 @@ from google.cloud import firestore
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 
-# --- Conditional .env Loading for Local Development ---
+
 script_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(script_dir))
 dotenv_path = os.path.join(project_root, '.env')
@@ -26,7 +26,7 @@ def fetch_daily_news(event, context):
     url = 'https://newsapi.org/v2/everything'
     
     now_utc = datetime.now(timezone.utc)
-    start_time_utc = now_utc - timedelta(hours=24)
+    start_time_utc = now_utc - timedelta(hours=730)
     from_timestamp = start_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     print(f"Function triggered. Fetching new articles published since {from_timestamp} UTC.")
@@ -74,7 +74,7 @@ def fetch_daily_news(event, context):
 
             if published_at and title:
                 unique_string = f"{article_url}{title}{published_at}"
-                doc_id = hashlib.sha2c56(unique_string.encode('utf-8')).hexdigest()
+                doc_id = hashlib.sha256(unique_string.encode('utf-8')).hexdigest()
 
                 article_data = {
                     'article_content': article.get('content'), 'source': article_url,
